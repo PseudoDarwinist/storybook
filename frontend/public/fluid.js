@@ -328,21 +328,14 @@ class FluidSimulation {
         this.curl = this.createFBO(simRes.width, simRes.height, ext.formatR, ext.halfFloatTexType, ext.formatRGBA, gl.NEAREST, false);
         this.pressure = this.createDoubleFBO(simRes.width, simRes.height, ext.formatR, ext.halfFloatTexType, ext.formatRGBA, gl.NEAREST, false);
 
-        // Create vertex buffer
-        this.blit = (() => {
-            gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), gl.STATIC_DRAW);
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
-            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 0, 2, 3]), gl.STATIC_DRAW);
-            
-            return () => {
-                gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), gl.STATIC_DRAW);
-                gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-                gl.enableVertexAttribArray(0);
-                gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
-            };
-        })();
+        // Create reusable vertex buffer (fix for performance and potential buffer issues)
+        this.vertexBuffer = gl.createBuffer();
+        this.indexBuffer = gl.createBuffer();
+        
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 0, 2, 3]), gl.STATIC_DRAW);
     }
 
     getResolution(resolution) {
