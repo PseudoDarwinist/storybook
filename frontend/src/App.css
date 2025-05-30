@@ -14,12 +14,26 @@ body {
   overflow-x: hidden;
 }
 
-/* Landing page styles */
+/* Landing page styles with GREEN gradient background */
 .landing-page-container {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   position: relative;
   width: 100vw;
   height: 100vh;
+  background: radial-gradient(ellipse at center, 
+    rgba(6, 78, 59, 1) 0%,     /* Dark emerald center */
+    rgba(5, 46, 22, 1) 35%,    /* Forest green */
+    rgba(3, 24, 12, 1) 70%,    /* Very dark green */
+    rgba(0, 0, 0, 1) 100%      /* Black edges */
+  );
+  /* Alternative gradient option */
+  background: linear-gradient(135deg, 
+    rgba(6, 78, 59, 1) 0%,     /* Emerald */
+    rgba(4, 120, 87, 1) 25%,   /* Green */
+    rgba(6, 95, 70, 1) 50%,    /* Teal */
+    rgba(3, 24, 12, 1) 75%,    /* Dark green */
+    rgba(0, 0, 0, 1) 100%      /* Black */
+  );
 }
 
 /* Floating elements */
@@ -31,6 +45,7 @@ body {
 .floating-image {
   filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.3));
   transition: opacity 0.3s ease;
+  border-radius: 12px;
 }
 
 .floating-image:hover {
@@ -48,6 +63,7 @@ body {
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.1;
+  text-shadow: 0 0 40px rgba(255, 255, 255, 0.3);
 }
 
 @keyframes shimmer {
@@ -66,6 +82,7 @@ body {
   opacity: 0.9;
   font-weight: 300;
   letter-spacing: 0.01em;
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
 }
 
 .cta-button {
@@ -121,6 +138,37 @@ body {
 #emergent-badge:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* Interactive cursor sparkle effects */
+.sparkle-trail {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+  animation: sparkle 0.8s ease-out forwards;
+}
+
+@keyframes sparkle {
+  0% {
+    transform: scale(0) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1) rotate(180deg);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(0) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+/* Particle glow effects */
+.particle-glow {
+  box-shadow: 
+    0 0 10px currentColor,
+    0 0 20px currentColor,
+    0 0 30px currentColor;
 }
 
 /* Custom scrollbar */
@@ -192,7 +240,8 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .floating-image-container,
   .headline,
-  .cta-button {
+  .cta-button,
+  .sparkle-trail {
     animation: none;
     transition: none;
   }
@@ -211,4 +260,32 @@ body {
 #emergent-badge:focus {
   outline: 2px solid #000000;
   outline-offset: 2px;
+}
+
+/* Additional glow effects for enhanced magic */
+.magic-glow {
+  filter: drop-shadow(0 0 10px rgba(168, 85, 247, 0.5))
+          drop-shadow(0 0 20px rgba(236, 72, 153, 0.3))
+          drop-shadow(0 0 30px rgba(59, 130, 246, 0.2));
+}
+
+/* Enhanced fluid background overlay */
+.fluid-overlay {
+  background: radial-gradient(circle at 50% 50%, 
+    rgba(168, 85, 247, 0.1) 0%,
+    rgba(236, 72, 153, 0.05) 30%,
+    transparent 70%
+  );
+  animation: fluid-pulse 4s ease-in-out infinite;
+}
+
+@keyframes fluid-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
 }
