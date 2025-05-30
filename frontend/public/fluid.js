@@ -322,11 +322,11 @@ class FluidSimulation {
         const simRes = this.getResolution(this.config.SIM_RESOLUTION);
         const dyeRes = this.getResolution(this.config.DYE_RESOLUTION);
 
-        this.density = this.createDoubleFBO(dyeRes.width, dyeRes.height, ext.formatRGBA, ext.halfFloatTexType, ext.formatRGBA, gl.LINEAR, true);
-        this.velocity = this.createDoubleFBO(simRes.width, simRes.height, ext.formatRG, ext.halfFloatTexType, ext.formatRGBA, gl.LINEAR, false);
-        this.divergence = this.createFBO(simRes.width, simRes.height, ext.formatR, ext.halfFloatTexType, ext.formatRGBA, gl.NEAREST, false);
-        this.curl = this.createFBO(simRes.width, simRes.height, ext.formatR, ext.halfFloatTexType, ext.formatRGBA, gl.NEAREST, false);
-        this.pressure = this.createDoubleFBO(simRes.width, simRes.height, ext.formatR, ext.halfFloatTexType, ext.formatRGBA, gl.NEAREST, false);
+        this.density = this.createDoubleFBO(dyeRes.width, dyeRes.height, ext.formatRGBA, ext.formatRGBA, ext.halfFloatTexType, gl.LINEAR, true);
+        this.velocity = this.createDoubleFBO(simRes.width, simRes.height, ext.formatRG, ext.formatRG, ext.halfFloatTexType, gl.LINEAR, false);
+        this.divergence = this.createFBO(simRes.width, simRes.height, ext.formatR, ext.formatR, ext.halfFloatTexType, gl.NEAREST, false);
+        this.curl = this.createFBO(simRes.width, simRes.height, ext.formatR, ext.formatR, ext.halfFloatTexType, gl.NEAREST, false);
+        this.pressure = this.createDoubleFBO(simRes.width, simRes.height, ext.formatR, ext.formatR, ext.halfFloatTexType, gl.NEAREST, false);
 
         // Create reusable vertex buffer (fix for performance and potential buffer issues)
         this.vertexBuffer = gl.createBuffer();
