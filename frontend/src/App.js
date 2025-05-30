@@ -58,176 +58,143 @@ const FloatingElement = ({ src, alt, size, position, delay = 0 }) => {
 
 const FluidSimulation = () => {
   const canvasRef = useRef(null);
-  const mouseRef = useRef({ x: 0, y: 0, prevX: 0, prevY: 0 });
-  const fluidRef = useRef({
-    velocityField: null,
-    pressureField: null,
-    dyeField: null,
-    time: 0
-  });
+  const fluidSimRef = useRef(null);
+  const pointersRef = useRef([]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-    if (!gl) {
-      console.warn('WebGL not supported, falling back to 2D canvas');
-      return;
-    }
-
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    // Simplified fluid simulation with WebGL
-    let animationId;
-    let time = 0;
-    
-    // Vertex shader
-    const vertexShader = gl.createShader(gl.VERTEX_SHADER);
-    gl.shaderSource(vertexShader, `
-      attribute vec2 position;
-      varying vec2 uv;
-      void main() {
-        uv = position * 0.5 + 0.5;
-        gl_Position = vec4(position, 0.0, 1.0);
-      }
-    `);
-    gl.compileShader(vertexShader);
-
-    // Fragment shader for fluid effect
-    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-    gl.shaderSource(fragmentShader, `
-      precision mediump float;
-      varying vec2 uv;
-      uniform float time;
-      uniform vec2 mouse;
-      uniform vec2 resolution;
-      
-      vec3 hsv2rgb(vec3 c) {
-        vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-      }
-      
-      void main() {
-        vec2 st = gl_FragCoord.xy / resolution.xy;
-        vec2 center = vec2(0.5);
-        
-        // Create flowing fluid effect
-        float t = time * 0.3;
-        vec2 flow = st - center;
-        float angle = atan(flow.y, flow.x);
-        float radius = length(flow);
-        
-        // Mouse interaction - create disturbance
-        vec2 mousePos = mouse / resolution.xy;
-        float mouseDist = distance(st, mousePos);
-        float mouseInfluence = smoothstep(0.15, 0.0, mouseDist);
-        
-        // Swirling motion
-        float swirl = sin(angle * 3.0 + t + radius * 8.0) * 0.1;
-        vec2 offset = vec2(cos(angle + swirl), sin(angle + swirl)) * radius * 0.3;
-        
-        // Color mixing and flowing
-        float colorTime = t + mouseInfluence * 2.0;
-        float hue1 = fract(colorTime * 0.1 + radius * 2.0 + sin(angle * 2.0) * 0.2);
-        float hue2 = fract(colorTime * 0.15 + length(st + offset) * 1.5);
-        
-        // Green-teal base colors with fluid mixing
-        float baseHue = 0.4 + sin(t * 0.2 + st.x * 3.0 + st.y * 2.0) * 0.1;
-        vec3 color1 = hsv2rgb(vec3(baseHue, 0.8, 0.6));
-        vec3 color2 = hsv2rgb(vec3(baseHue + 0.1, 0.9, 0.4));
-        
-        // Fluid displacement
-        vec2 displacement = vec2(
-          sin(st.x * 4.0 + t + mouseInfluence * 5.0) * 0.02,
-          cos(st.y * 3.0 + t * 1.2 + mouseInfluence * 3.0) * 0.02
-        );
-        
-        vec2 fluidSt = st + displacement + offset * mouseInfluence;
-        
-        // Blend colors based on fluid movement
-        float mixer = sin(fluidSt.x * 6.0 + fluidSt.y * 4.0 + t * 2.0 + mouseInfluence * 8.0) * 0.5 + 0.5;
-        vec3 finalColor = mix(color1, color2, mixer);
-        
-        // Add some shimmer and depth
-        float shimmer = sin(st.x * 20.0 + t * 3.0) * sin(st.y * 15.0 + t * 2.0) * 0.1 + 0.9;
-        finalColor *= shimmer;
-        
-        // Darken towards edges for the green gradient effect
-        float vignette = smoothstep(1.2, 0.3, length(flow));
-        finalColor *= vignette * 0.8 + 0.2;
-        
-        gl_FragColor = vec4(finalColor, 1.0);
-      }
-    `);
-    gl.compileShader(fragmentShader);
-
-    // Create shader program
-    const program = gl.createProgram();
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-    gl.useProgram(program);
-
-    // Create quad vertices
-    const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-
-    const position = gl.getAttribLocation(program, 'position');
-    gl.enableVertexAttribArray(position);
-    gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-
-    // Get uniform locations
-    const timeUniform = gl.getUniformLocation(program, 'time');
-    const mouseUniform = gl.getUniformLocation(program, 'mouse');
-    const resolutionUniform = gl.getUniformLocation(program, 'resolution');
-
-    const animate = () => {
-      time += 0.016; // ~60fps
-      
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      gl.clearColor(0, 0, 0, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      
-      // Update uniforms
-      gl.uniform1f(timeUniform, time);
-      gl.uniform2f(mouseUniform, mouseRef.current.x, canvas.height - mouseRef.current.y);
-      gl.uniform2f(resolutionUniform, canvas.width, canvas.height);
-      
-      // Draw
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      
-      animationId = requestAnimationFrame(animate);
-    };
-
-    animate();
-
-    const handleMouseMove = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      mouseRef.current.prevX = mouseRef.current.x;
-      mouseRef.current.prevY = mouseRef.current.y;
-      mouseRef.current.x = e.clientX - rect.left;
-      mouseRef.current.y = e.clientY - rect.top;
-    };
-
-    const handleResize = () => {
+    // Resize canvas to full screen
+    const resizeCanvas = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('resize', handleResize);
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // Load and initialize fluid simulation
+    const script = document.createElement('script');
+    script.src = '/fluid.js';
+    script.onload = () => {
+      if (window.FluidSimulation) {
+        fluidSimRef.current = new window.FluidSimulation(canvas);
+        
+        // Initialize pointer
+        const pointer = {
+          id: -1,
+          texcoordX: 0,
+          texcoordY: 0,
+          prevTexcoordX: 0,
+          prevTexcoordY: 0,
+          deltaX: 0,
+          deltaY: 0,
+          down: false,
+          moved: false,
+          color: { r: 0, g: 0, b: 0 }
+        };
+        pointersRef.current = [pointer];
+        fluidSimRef.current.pointers = pointersRef.current;
+
+        // Add some initial splats for ambient motion
+        setTimeout(() => {
+          if (fluidSimRef.current) {
+            fluidSimRef.current.splatStack.push(5);
+          }
+        }, 1000);
+      }
+    };
+    document.head.appendChild(script);
+
+    // Mouse event handlers
+    const handleMouseMove = (e) => {
+      if (!fluidSimRef.current) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      const pointer = pointersRef.current[0];
+      if (!pointer.down) {
+        fluidSimRef.current.updatePointerDownData(pointer, -1, x, y);
+      }
+      fluidSimRef.current.updatePointerMoveData(pointer, x, y);
+    };
+
+    const handleMouseDown = (e) => {
+      if (!fluidSimRef.current) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      const pointer = pointersRef.current[0];
+      fluidSimRef.current.updatePointerDownData(pointer, -1, x, y);
+    };
+
+    const handleMouseUp = () => {
+      if (!fluidSimRef.current) return;
+      
+      const pointer = pointersRef.current[0];
+      fluidSimRef.current.updatePointerUpData(pointer);
+    };
+
+    // Touch event handlers
+    const handleTouchStart = (e) => {
+      e.preventDefault();
+      if (!fluidSimRef.current) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      
+      const pointer = pointersRef.current[0];
+      fluidSimRef.current.updatePointerDownData(pointer, touch.identifier, x, y);
+    };
+
+    const handleTouchMove = (e) => {
+      e.preventDefault();
+      if (!fluidSimRef.current) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      
+      const pointer = pointersRef.current[0];
+      fluidSimRef.current.updatePointerMoveData(pointer, x, y);
+    };
+
+    const handleTouchEnd = (e) => {
+      e.preventDefault();
+      if (!fluidSimRef.current) return;
+      
+      const pointer = pointersRef.current[0];
+      fluidSimRef.current.updatePointerUpData(pointer);
+    };
+
+    // Add event listeners
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mousedown', handleMouseDown);
+    canvas.addEventListener('mouseup', handleMouseUp);
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
 
     return () => {
-      if (animationId) {
-        cancelAnimationFrame(animationId);
-      }
-      document.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', resizeCanvas);
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mousedown', handleMouseDown);
+      canvas.removeEventListener('mouseup', handleMouseUp);
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      canvas.removeEventListener('touchmove', handleTouchMove);
+      canvas.removeEventListener('touchend', handleTouchEnd);
+      
+      // Clean up script
+      const scripts = document.querySelectorAll('script[src="/fluid.js"]');
+      scripts.forEach(script => script.remove());
     };
   }, []);
 
@@ -235,7 +202,10 @@ const FluidSimulation = () => {
     <canvas 
       ref={canvasRef}
       className="fixed inset-0 z-0 w-full h-full"
-      style={{ background: 'linear-gradient(135deg, #064e3b 0%, #052e16 50%, #000000 100%)' }}
+      style={{ 
+        background: 'linear-gradient(135deg, #064e3b 0%, #052e16 50%, #000000 100%)',
+        touchAction: 'none'
+      }}
     />
   );
 };
@@ -275,7 +245,7 @@ const CustomCursor = () => {
 };
 
 const Home = () => {
-  // Magical floating elements data
+  // Magical floating elements data  
   const floatingElements = [
     {
       src: "https://storybook.emergent.sh/images/download1.png",
