@@ -3,7 +3,7 @@ import sys
 from datetime import datetime
 
 class StoryBookAPITester:
-    def __init__(self, base_url="https://5e2de7e3-5f5b-4b77-b01e-32f418b92a4f.preview.emergentagent.com"):
+    def __init__(self, base_url="https://472cce8d-80ac-4c09-9f0b-a4df06000c7c.preview.emergentagent.com"):
         self.base_url = base_url
         self.tests_run = 0
         self.tests_passed = 0
