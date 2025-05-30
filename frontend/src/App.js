@@ -232,11 +232,32 @@ const FluidSimulation = () => {
       canvas.removeEventListener('touchmove', handleTouchMove);
       canvas.removeEventListener('touchend', handleTouchEnd);
       
-      // Clean up script
-      const scripts = document.querySelectorAll('script[src="/fluid.js"]');
-      scripts.forEach(script => script.remove());
+      // Clean up script only if we added it
+      if (!window.FluidSimulation) {
+        const scripts = document.querySelectorAll('script[src="/fluid.js"]');
+        scripts.forEach(script => script.remove());
+      }
     };
   }, []);
+
+  // Fallback CSS animation if WebGL not supported
+  if (!webglSupported) {
+    return (
+      <div 
+        className="fixed inset-0 z-0 w-full h-full fallback-fluid-bg"
+        style={{ 
+          background: `
+            radial-gradient(ellipse at 20% 50%, rgba(6, 78, 59, 0.8) 0%, transparent 50%),
+            radial-gradient(ellipse at 80% 20%, rgba(16, 185, 129, 0.6) 0%, transparent 50%),
+            radial-gradient(ellipse at 40% 80%, rgba(5, 46, 22, 0.7) 0%, transparent 50%),
+            linear-gradient(135deg, #064e3b 0%, #052e16 50%, #000000 100%)
+          `,
+          backgroundSize: '100% 100%, 100% 100%, 100% 100%, 100% 100%',
+          animation: 'fluidFallback 8s ease-in-out infinite'
+        }}
+      />
+    );
+  }
 
   return (
     <canvas 
