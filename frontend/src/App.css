@@ -211,3 +211,27 @@ canvas {
           drop-shadow(0 0 20px rgba(236, 72, 153, 0.3))
           drop-shadow(0 0 30px rgba(59, 130, 246, 0.2));
 }
+
+/* Fallback fluid animation for browsers without WebGL support */
+.fallback-fluid-bg {
+  animation: fluidFallback 8s ease-in-out infinite;
+}
+
+@keyframes fluidFallback {
+  0%, 100% {
+    background-position: 0% 50%, 100% 50%, 50% 100%;
+    filter: hue-rotate(0deg);
+  }
+  25% {
+    background-position: 25% 75%, 75% 25%, 25% 25%;
+    filter: hue-rotate(90deg);
+  }
+  50% {
+    background-position: 50% 100%, 50% 0%, 75% 50%;
+    filter: hue-rotate(180deg);
+  }
+  75% {
+    background-position: 75% 25%, 25% 75%, 100% 75%;
+    filter: hue-rotate(270deg);
+  }
+}
