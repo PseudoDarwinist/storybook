@@ -703,5 +703,7 @@ class FluidSimulation {
     }
 }
 
-// Make FluidSimulation available globally
-window.FluidSimulation = FluidSimulation;
+// Only declare FluidSimulation if it doesn't already exist
+if (typeof window !== 'undefined' && !window.FluidSimulation) {
+    window.FluidSimulation = FluidSimulation;
+}
