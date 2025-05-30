@@ -702,3 +702,6 @@ class FluidSimulation {
         this.gl.drawElements(this.gl.TRIANGLES, 6, this.gl.UNSIGNED_SHORT, 0);
     }
 }
+
+// Make FluidSimulation available globally
+window.FluidSimulation = FluidSimulation;
