@@ -462,30 +462,27 @@ class FluidSimulation {
         gl.disable(gl.BLEND);
 
         // Curl
-        this.curlProgram = this.programs.curl;
-        gl.useProgram(this.curlProgram);
-        gl.uniform2f(gl.getUniformLocation(this.curlProgram, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
-        gl.uniform1i(gl.getUniformLocation(this.curlProgram, 'uVelocity'), this.velocity.read.attach(0));
+        gl.useProgram(this.programs.curl);
+        gl.uniform2f(gl.getUniformLocation(this.programs.curl, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
+        gl.uniform1i(gl.getUniformLocation(this.programs.curl, 'uVelocity'), this.velocity.read.attach(0));
 
         this.blit(this.curl);
 
         // Vorticity
-        this.vorticityProgram = this.programs.vorticity;
-        gl.useProgram(this.vorticityProgram);
-        gl.uniform2f(gl.getUniformLocation(this.vorticityProgram, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
-        gl.uniform1i(gl.getUniformLocation(this.vorticityProgram, 'uVelocity'), this.velocity.read.attach(0));
-        gl.uniform1i(gl.getUniformLocation(this.vorticityProgram, 'uCurl'), this.curl.attach(1));
-        gl.uniform1f(gl.getUniformLocation(this.vorticityProgram, 'curl'), this.config.CURL);
-        gl.uniform1f(gl.getUniformLocation(this.vorticityProgram, 'dt'), dt);
+        gl.useProgram(this.programs.vorticity);
+        gl.uniform2f(gl.getUniformLocation(this.programs.vorticity, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
+        gl.uniform1i(gl.getUniformLocation(this.programs.vorticity, 'uVelocity'), this.velocity.read.attach(0));
+        gl.uniform1i(gl.getUniformLocation(this.programs.vorticity, 'uCurl'), this.curl.attach(1));
+        gl.uniform1f(gl.getUniformLocation(this.programs.vorticity, 'curl'), this.config.CURL);
+        gl.uniform1f(gl.getUniformLocation(this.programs.vorticity, 'dt'), dt);
 
         this.blit(this.velocity.write);
         this.velocity.swap();
 
         // Divergence
-        this.divergenceProgram = this.programs.divergence;
-        gl.useProgram(this.divergenceProgram);
-        gl.uniform2f(gl.getUniformLocation(this.divergenceProgram, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
-        gl.uniform1i(gl.getUniformLocation(this.divergenceProgram, 'uVelocity'), this.velocity.read.attach(0));
+        gl.useProgram(this.programs.divergence);
+        gl.uniform2f(gl.getUniformLocation(this.programs.divergence, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
+        gl.uniform1i(gl.getUniformLocation(this.programs.divergence, 'uVelocity'), this.velocity.read.attach(0));
 
         this.blit(this.divergence);
 
@@ -494,43 +491,53 @@ class FluidSimulation {
         gl.clear(gl.COLOR_BUFFER_BIT);
 
         // Pressure
-        this.pressureProgram = this.programs.pressure;
-        gl.useProgram(this.pressureProgram);
-        gl.uniform2f(gl.getUniformLocation(this.pressureProgram, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
-        gl.uniform1i(gl.getUniformLocation(this.pressureProgram, 'uDivergence'), this.divergence.attach(0));
+        gl.useProgram(this.programs.pressure);
+        gl.uniform2f(gl.getUniformLocation(this.programs.pressure, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
+        gl.uniform1i(gl.getUniformLocation(this.programs.pressure, 'uDivergence'), this.divergence.attach(0));
 
         for (let i = 0; i < this.config.PRESSURE_ITERATIONS; i++) {
-            gl.uniform1i(gl.getUniformLocation(this.pressureProgram, 'uPressure'), this.pressure.read.attach(1));
+            gl.uniform1i(gl.getUniformLocation(this.programs.pressure, 'uPressure'), this.pressure.read.attach(1));
             this.blit(this.pressure.write);
             this.pressure.swap();
         }
 
         // Gradient subtract
-        this.gradSubtractProgram = this.programs.gradientSubtract;
-        gl.useProgram(this.gradSubtractProgram);
-        gl.uniform2f(gl.getUniformLocation(this.gradSubtractProgram, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
-        gl.uniform1i(gl.getUniformLocation(this.gradSubtractProgram, 'uPressure'), this.pressure.read.attach(0));
-        gl.uniform1i(gl.getUniformLocation(this.gradSubtractProgram, 'uVelocity'), this.velocity.read.attach(1));
+        gl.useProgram(this.programs.gradientSubtract);
+        gl.uniform2f(gl.getUniformLocation(this.programs.gradientSubtract, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
+        gl.uniform1i(gl.getUniformLocation(this.programs.gradientSubtract, 'uPressure'), this.pressure.read.attach(0));
+        gl.uniform1i(gl.getUniformLocation(this.programs.gradientSubtract, 'uVelocity'), this.velocity.read.attach(1));
 
         this.blit(this.velocity.write);
         this.velocity.swap();
 
-        // Advect velocity
-        this.advectionProgram = this.programs.advection;
-        gl.useProgram(this.advectionProgram);
-        gl.uniform2f(gl.getUniformLocation(this.advectionProgram, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
-        gl.uniform1i(gl.getUniformLocation(this.advectionProgram, 'uVelocity'), this.velocity.read.attach(0));
-        gl.uniform1i(gl.getUniformLocation(this.advectionProgram, 'uSource'), this.velocity.read.attach(0));
-        gl.uniform1f(gl.getUniformLocation(this.advectionProgram, 'dt'), dt);
-        gl.uniform1f(gl.getUniformLocation(this.advectionProgram, 'dissipation'), this.config.VELOCITY_DISSIPATION);
+        // Advect velocity - FIX: Unbind textures properly to avoid feedback loop
+        gl.useProgram(this.programs.advection);
+        gl.uniform2f(gl.getUniformLocation(this.programs.advection, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
+        
+        // First bind velocity texture
+        const velocityTextureUnit = this.velocity.read.attach(0);
+        gl.uniform1i(gl.getUniformLocation(this.programs.advection, 'uVelocity'), velocityTextureUnit);
+        
+        // Use the same texture for source in velocity advection (this is correct for self-advection)
+        gl.uniform1i(gl.getUniformLocation(this.programs.advection, 'uSource'), velocityTextureUnit);
+        
+        gl.uniform1f(gl.getUniformLocation(this.programs.advection, 'dt'), dt);
+        gl.uniform1f(gl.getUniformLocation(this.programs.advection, 'dissipation'), this.config.VELOCITY_DISSIPATION);
 
         this.blit(this.velocity.write);
         this.velocity.swap();
 
-        // Advect color
-        gl.uniform1i(gl.getUniformLocation(this.advectionProgram, 'uVelocity'), this.velocity.read.attach(0));
-        gl.uniform1i(gl.getUniformLocation(this.advectionProgram, 'uSource'), this.density.read.attach(1));
-        gl.uniform1f(gl.getUniformLocation(this.advectionProgram, 'dissipation'), this.config.DENSITY_DISSIPATION);
+        // Advect color - FIX: Properly separate velocity and density texture units
+        // Re-use the advection program but update texture uniforms
+        gl.uniform2f(gl.getUniformLocation(this.programs.advection, 'texelSize'), this.density.texelSizeX, this.density.texelSizeY);
+        
+        // Use different texture units to avoid conflicts
+        const velocityUnit = this.velocity.read.attach(0);
+        const densityUnit = this.density.read.attach(1);
+        
+        gl.uniform1i(gl.getUniformLocation(this.programs.advection, 'uVelocity'), velocityUnit);
+        gl.uniform1i(gl.getUniformLocation(this.programs.advection, 'uSource'), densityUnit);
+        gl.uniform1f(gl.getUniformLocation(this.programs.advection, 'dissipation'), this.config.DENSITY_DISSIPATION);
 
         this.blit(this.density.write);
         this.density.swap();
