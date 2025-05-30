@@ -61,6 +61,7 @@ const FluidSimulation = () => {
   const fluidSimRef = useRef(null);
   const pointersRef = useRef([]);
   const [webglSupported, setWebglSupported] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -79,35 +80,18 @@ const FluidSimulation = () => {
     const resizeCanvas = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      if (fluidSimRef.current && fluidSimRef.current.resize) {
+        fluidSimRef.current.resize();
+      }
     };
 
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    // Check if script already loaded
-    if (window.FluidSimulation) {
-      initializeFluidSimulation();
-    } else {
-      // Load fluid simulation script only if not already loaded
-      const existingScript = document.querySelector('script[src="/fluid.js"]');
-      if (!existingScript) {
-        const script = document.createElement('script');
-        script.src = '/fluid.js';
-        script.onload = initializeFluidSimulation;
-        script.onerror = () => {
-          console.error('Failed to load fluid simulation');
-          setWebglSupported(false);
-        };
-        document.head.appendChild(script);
-      } else {
-        // Script exists but might still be loading
-        existingScript.onload = initializeFluidSimulation;
-      }
-    }
-
-    function initializeFluidSimulation() {
+    // Load and initialize fluid simulation
+    const initializeFluidSimulation = () => {
       try {
-        if (window.FluidSimulation && canvas) {
+        if (window.FluidSimulation && canvas && !isInitialized) {
           fluidSimRef.current = new window.FluidSimulation(canvas);
           
           // Initialize pointer
@@ -139,11 +123,50 @@ const FluidSimulation = () => {
                 fluidSimRef.current.splatStack.push(3);
               }
             }, 1000);
+            
+            setIsInitialized(true);
           }
         }
       } catch (error) {
         console.error('Error initializing fluid simulation:', error);
         setWebglSupported(false);
+      }
+    };
+
+    // Check if FluidSimulation class is already available
+    if (window.FluidSimulation) {
+      initializeFluidSimulation();
+    } else {
+      // Load fluid simulation script only once globally
+      if (!window.fluidScriptLoaded && !window.fluidScriptLoading) {
+        window.fluidScriptLoading = true;
+        const script = document.createElement('script');
+        script.src = '/fluid.js';
+        script.onload = () => {
+          window.fluidScriptLoaded = true;
+          window.fluidScriptLoading = false;
+          initializeFluidSimulation();
+        };
+        script.onerror = () => {
+          console.error('Failed to load fluid simulation');
+          window.fluidScriptLoading = false;
+          setWebglSupported(false);
+        };
+        document.head.appendChild(script);
+      } else if (window.fluidScriptLoaded) {
+        initializeFluidSimulation();
+      } else {
+        // Script is loading, wait for it
+        const checkForFluidSimulation = () => {
+          if (window.FluidSimulation) {
+            initializeFluidSimulation();
+          } else if (!window.fluidScriptLoading) {
+            setWebglSupported(false);
+          } else {
+            setTimeout(checkForFluidSimulation, 100);
+          }
+        };
+        setTimeout(checkForFluidSimulation, 100);
       }
     }
 
