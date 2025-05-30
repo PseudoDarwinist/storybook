@@ -254,14 +254,8 @@ const FluidSimulation = () => {
       canvas.removeEventListener('touchstart', handleTouchStart);
       canvas.removeEventListener('touchmove', handleTouchMove);
       canvas.removeEventListener('touchend', handleTouchEnd);
-      
-      // Clean up script only if we added it
-      if (!window.FluidSimulation) {
-        const scripts = document.querySelectorAll('script[src="/fluid.js"]');
-        scripts.forEach(script => script.remove());
-      }
     };
-  }, []);
+  }, [isInitialized]);
 
   // Fallback CSS animation if WebGL not supported
   if (!webglSupported) {
