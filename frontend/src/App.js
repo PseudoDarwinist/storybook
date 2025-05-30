@@ -56,196 +56,172 @@ const FloatingElement = ({ src, alt, size, position, delay = 0 }) => {
   );
 };
 
-const FluidCanvas = () => {
+const FluidSimulation = () => {
   const canvasRef = useRef(null);
-  
+  const mouseRef = useRef({ x: 0, y: 0, prevX: 0, prevY: 0 });
+  const fluidRef = useRef({
+    velocityField: null,
+    pressureField: null,
+    dyeField: null,
+    time: 0
+  });
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
+
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    if (!gl) {
+      console.warn('WebGL not supported, falling back to 2D canvas');
+      return;
+    }
+
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    
+
+    // Simplified fluid simulation with WebGL
     let animationId;
     let time = 0;
     
-    const animate = () => {
-      time += 0.01;
+    // Vertex shader
+    const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vertexShader, `
+      attribute vec2 position;
+      varying vec2 uv;
+      void main() {
+        uv = position * 0.5 + 0.5;
+        gl_Position = vec4(position, 0.0, 1.0);
+      }
+    `);
+    gl.compileShader(vertexShader);
+
+    // Fragment shader for fluid effect
+    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fragmentShader, `
+      precision mediump float;
+      varying vec2 uv;
+      uniform float time;
+      uniform vec2 mouse;
+      uniform vec2 resolution;
       
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      vec3 hsv2rgb(vec3 c) {
+        vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+      }
       
-      // Create multiple flowing gradients
-      for (let i = 0; i < 3; i++) {
-        const gradient = ctx.createRadialGradient(
-          canvas.width / 2 + Math.sin(time + i) * 300,
-          canvas.height / 2 + Math.cos(time * 0.8 + i) * 200,
-          0,
-          canvas.width / 2,
-          canvas.height / 2,
-          Math.max(canvas.width, canvas.height) / 1.5
+      void main() {
+        vec2 st = gl_FragCoord.xy / resolution.xy;
+        vec2 center = vec2(0.5);
+        
+        // Create flowing fluid effect
+        float t = time * 0.3;
+        vec2 flow = st - center;
+        float angle = atan(flow.y, flow.x);
+        float radius = length(flow);
+        
+        // Mouse interaction - create disturbance
+        vec2 mousePos = mouse / resolution.xy;
+        float mouseDist = distance(st, mousePos);
+        float mouseInfluence = smoothstep(0.15, 0.0, mouseDist);
+        
+        // Swirling motion
+        float swirl = sin(angle * 3.0 + t + radius * 8.0) * 0.1;
+        vec2 offset = vec2(cos(angle + swirl), sin(angle + swirl)) * radius * 0.3;
+        
+        // Color mixing and flowing
+        float colorTime = t + mouseInfluence * 2.0;
+        float hue1 = fract(colorTime * 0.1 + radius * 2.0 + sin(angle * 2.0) * 0.2);
+        float hue2 = fract(colorTime * 0.15 + length(st + offset) * 1.5);
+        
+        // Green-teal base colors with fluid mixing
+        float baseHue = 0.4 + sin(t * 0.2 + st.x * 3.0 + st.y * 2.0) * 0.1;
+        vec3 color1 = hsv2rgb(vec3(baseHue, 0.8, 0.6));
+        vec3 color2 = hsv2rgb(vec3(baseHue + 0.1, 0.9, 0.4));
+        
+        // Fluid displacement
+        vec2 displacement = vec2(
+          sin(st.x * 4.0 + t + mouseInfluence * 5.0) * 0.02,
+          cos(st.y * 3.0 + t * 1.2 + mouseInfluence * 3.0) * 0.02
         );
         
-        // Purple/Pink/Blue flowing colors
-        gradient.addColorStop(0, `rgba(168, 85, 247, ${0.15 + Math.sin(time + i) * 0.1})`);
-        gradient.addColorStop(0.3, `rgba(236, 72, 153, ${0.1 + Math.cos(time * 1.2 + i) * 0.08})`);
-        gradient.addColorStop(0.6, `rgba(59, 130, 246, ${0.08 + Math.sin(time * 0.7 + i) * 0.06})`);
-        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        vec2 fluidSt = st + displacement + offset * mouseInfluence;
         
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Blend colors based on fluid movement
+        float mixer = sin(fluidSt.x * 6.0 + fluidSt.y * 4.0 + t * 2.0 + mouseInfluence * 8.0) * 0.5 + 0.5;
+        vec3 finalColor = mix(color1, color2, mixer);
+        
+        // Add some shimmer and depth
+        float shimmer = sin(st.x * 20.0 + t * 3.0) * sin(st.y * 15.0 + t * 2.0) * 0.1 + 0.9;
+        finalColor *= shimmer;
+        
+        // Darken towards edges for the green gradient effect
+        float vignette = smoothstep(1.2, 0.3, length(flow));
+        finalColor *= vignette * 0.8 + 0.2;
+        
+        gl_FragColor = vec4(finalColor, 1.0);
       }
+    `);
+    gl.compileShader(fragmentShader);
+
+    // Create shader program
+    const program = gl.createProgram();
+    gl.attachShader(program, vertexShader);
+    gl.attachShader(program, fragmentShader);
+    gl.linkProgram(program);
+    gl.useProgram(program);
+
+    // Create quad vertices
+    const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+    const position = gl.getAttribLocation(program, 'position');
+    gl.enableVertexAttribArray(position);
+    gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+
+    // Get uniform locations
+    const timeUniform = gl.getUniformLocation(program, 'time');
+    const mouseUniform = gl.getUniformLocation(program, 'mouse');
+    const resolutionUniform = gl.getUniformLocation(program, 'resolution');
+
+    const animate = () => {
+      time += 0.016; // ~60fps
+      
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      
+      // Update uniforms
+      gl.uniform1f(timeUniform, time);
+      gl.uniform2f(mouseUniform, mouseRef.current.x, canvas.height - mouseRef.current.y);
+      gl.uniform2f(resolutionUniform, canvas.width, canvas.height);
+      
+      // Draw
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       
       animationId = requestAnimationFrame(animate);
     };
-    
-    animate();
-    
-    const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    
-    window.addEventListener('resize', handleResize);
-    
-    return () => {
-      if (animationId) {
-        cancelAnimationFrame(animationId);
-      }
-      window.removeEventListener('resize', handleResize);
-    };
-  }, []);
-  
-  return (
-    <canvas 
-      ref={canvasRef}
-      id="fluid" 
-      className="w-screen h-screen fixed top-0 left-0 z-0 pointer-events-none"
-    />
-  );
-};
 
-const InteractiveCursor = () => {
-  const canvasRef = useRef(null);
-  const cursorRef = useRef(null);
-  const particlesRef = useRef([]);
-  const mouseRef = useRef({ x: 0, y: 0 });
-  
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const cursor = cursorRef.current;
-    if (!canvas || !cursor) return;
-    
-    const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    
-    let animationId;
-    
-    // Particle system
-    class Particle {
-      constructor(x, y) {
-        this.x = x;
-        this.y = y;
-        this.vx = (Math.random() - 0.5) * 4;
-        this.vy = (Math.random() - 0.5) * 4;
-        this.life = 1;
-        this.decay = Math.random() * 0.02 + 0.01;
-        this.size = Math.random() * 3 + 1;
-        this.color = this.getRandomColor();
-      }
-      
-      getRandomColor() {
-        const colors = [
-          'rgba(168, 85, 247', // Purple
-          'rgba(236, 72, 153', // Pink
-          'rgba(59, 130, 246',  // Blue
-          'rgba(16, 185, 129', // Emerald
-          'rgba(245, 158, 11', // Amber
-          'rgba(239, 68, 68',  // Red
-        ];
-        return colors[Math.floor(Math.random() * colors.length)];
-      }
-      
-      update() {
-        this.x += this.vx;
-        this.y += this.vy;
-        this.life -= this.decay;
-        this.vx *= 0.98;
-        this.vy *= 0.98;
-      }
-      
-      draw(ctx) {
-        ctx.save();
-        ctx.globalAlpha = this.life;
-        
-        // Create glowing effect
-        const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size * 2);
-        gradient.addColorStop(0, this.color + ', 1)');
-        gradient.addColorStop(0.5, this.color + ', 0.5)');
-        gradient.addColorStop(1, this.color + ', 0)');
-        
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size * 2, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Inner bright core
-        ctx.fillStyle = this.color + ', 1)';
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size * 0.3, 0, Math.PI * 2);
-        ctx.fill();
-        
-        ctx.restore();
-      }
-    }
-    
+    animate();
+
     const handleMouseMove = (e) => {
       const rect = canvas.getBoundingClientRect();
+      mouseRef.current.prevX = mouseRef.current.x;
+      mouseRef.current.prevY = mouseRef.current.y;
       mouseRef.current.x = e.clientX - rect.left;
       mouseRef.current.y = e.clientY - rect.top;
-      
-      // Update cursor position
-      cursor.style.left = `${e.clientX}px`;
-      cursor.style.top = `${e.clientY}px`;
-      
-      // Add particles on mouse movement
-      for (let i = 0; i < 3; i++) {
-        particlesRef.current.push(new Particle(
-          mouseRef.current.x + (Math.random() - 0.5) * 10,
-          mouseRef.current.y + (Math.random() - 0.5) * 10
-        ));
-      }
-      
-      // Limit particle count
-      if (particlesRef.current.length > 100) {
-        particlesRef.current = particlesRef.current.slice(-100);
-      }
     };
-    
-    const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Update and draw particles
-      particlesRef.current = particlesRef.current.filter(particle => {
-        particle.update();
-        particle.draw(ctx);
-        return particle.life > 0;
-      });
-      
-      animationId = requestAnimationFrame(animate);
-    };
-    
+
     const handleResize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     };
-    
+
     document.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('resize', handleResize);
-    animate();
-    
+
     return () => {
       if (animationId) {
         cancelAnimationFrame(animationId);
@@ -254,25 +230,47 @@ const InteractiveCursor = () => {
       window.removeEventListener('resize', handleResize);
     };
   }, []);
+
+  return (
+    <canvas 
+      ref={canvasRef}
+      className="fixed inset-0 z-0 w-full h-full"
+      style={{ background: 'linear-gradient(135deg, #064e3b 0%, #052e16 50%, #000000 100%)' }}
+    />
+  );
+};
+
+const CustomCursor = () => {
+  const cursorRef = useRef(null);
+  
+  useEffect(() => {
+    const cursor = cursorRef.current;
+    if (!cursor) return;
+    
+    const handleMouseMove = (e) => {
+      cursor.style.left = `${e.clientX}px`;
+      cursor.style.top = `${e.clientY}px`;
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
   
   return (
-    <>
-      <canvas 
-        ref={canvasRef}
-        className="fixed inset-0 z-40 pointer-events-none"
+    <div className="pointer-events-none fixed inset-0 z-50">
+      <div 
+        ref={cursorRef}
+        className="absolute rounded-full bg-white mix-blend-difference"
+        style={{
+          width: '16px',
+          height: '16px',
+          transform: 'translate(-50%, -50%)'
+        }}
       />
-      <div className="pointer-events-none fixed inset-0 z-50">
-        <div 
-          ref={cursorRef}
-          className="absolute rounded-full bg-white mix-blend-difference"
-          style={{
-            width: '16px',
-            height: '16px',
-            transform: 'translate(-50%, -50%)'
-          }}
-        />
-      </div>
-    </>
+    </div>
   );
 };
 
@@ -339,11 +337,8 @@ const Home = () => {
 
   return (
     <div className="landing-page-container relative overflow-hidden min-h-screen">
-      {/* Background Canvas */}
-      <canvas className="h-full w-full absolute inset-0 z-0" width="300" height="150"></canvas>
-      
-      {/* Fluid Canvas */}
-      <FluidCanvas />
+      {/* Fluid Simulation Background */}
+      <FluidSimulation />
       
       {/* Floating Elements */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-[2]">
@@ -359,8 +354,8 @@ const Home = () => {
         ))}
       </div>
       
-      {/* Interactive Cursor with Sparkles */}
-      <InteractiveCursor />
+      {/* Custom Cursor */}
+      <CustomCursor />
       
       {/* Main Content */}
       <div className="content-container relative z-20 flex flex-col items-center justify-center min-h-screen text-center px-6">
@@ -378,24 +373,6 @@ const Home = () => {
           Start your adventure
         </a>
       </div>
-      
-      {/* Emergent Badge */}
-      <a 
-        id="emergent-badge" 
-        target="_blank" 
-        href="https://app.emergent.sh/?utm_source=emergent-badge"
-        rel="noopener noreferrer"
-        className="fixed bottom-5 right-5 flex items-center no-underline p-3 font-sans z-[9999] shadow-lg rounded-lg bg-white border border-gray-200 hover:shadow-xl transition-shadow duration-300"
-      >
-        <div className="flex flex-row items-center">
-          <img 
-            className="w-5 h-5 mr-2" 
-            src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" 
-            alt="Emergent logo"
-          />
-          <p className="text-black text-sm font-medium m-0">Made with Emergent</p>
-        </div>
-      </a>
     </div>
   );
 };
