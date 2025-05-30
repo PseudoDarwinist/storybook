@@ -60,10 +60,20 @@ const FluidSimulation = () => {
   const canvasRef = useRef(null);
   const fluidSimRef = useRef(null);
   const pointersRef = useRef([]);
+  const [webglSupported, setWebglSupported] = useState(true);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    // Check WebGL support
+    const testCanvas = document.createElement('canvas');
+    const gl = testCanvas.getContext('webgl') || testCanvas.getContext('experimental-webgl');
+    if (!gl) {
+      console.warn('WebGL not supported, using fallback CSS animation');
+      setWebglSupported(false);
+      return;
+    }
 
     // Resize canvas to full screen
     const resizeCanvas = () => {
@@ -74,38 +84,68 @@ const FluidSimulation = () => {
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    // Load and initialize fluid simulation
-    const script = document.createElement('script');
-    script.src = '/fluid.js';
-    script.onload = () => {
-      if (window.FluidSimulation) {
-        fluidSimRef.current = new window.FluidSimulation(canvas);
-        
-        // Initialize pointer
-        const pointer = {
-          id: -1,
-          texcoordX: 0,
-          texcoordY: 0,
-          prevTexcoordX: 0,
-          prevTexcoordY: 0,
-          deltaX: 0,
-          deltaY: 0,
-          down: false,
-          moved: false,
-          color: { r: 0, g: 0, b: 0 }
+    // Check if script already loaded
+    if (window.FluidSimulation) {
+      initializeFluidSimulation();
+    } else {
+      // Load fluid simulation script only if not already loaded
+      const existingScript = document.querySelector('script[src="/fluid.js"]');
+      if (!existingScript) {
+        const script = document.createElement('script');
+        script.src = '/fluid.js';
+        script.onload = initializeFluidSimulation;
+        script.onerror = () => {
+          console.error('Failed to load fluid simulation');
+          setWebglSupported(false);
         };
-        pointersRef.current = [pointer];
-        fluidSimRef.current.pointers = pointersRef.current;
-
-        // Add some initial splats for ambient motion
-        setTimeout(() => {
-          if (fluidSimRef.current) {
-            fluidSimRef.current.splatStack.push(5);
-          }
-        }, 1000);
+        document.head.appendChild(script);
+      } else {
+        // Script exists but might still be loading
+        existingScript.onload = initializeFluidSimulation;
       }
-    };
-    document.head.appendChild(script);
+    }
+
+    function initializeFluidSimulation() {
+      try {
+        if (window.FluidSimulation && canvas) {
+          fluidSimRef.current = new window.FluidSimulation(canvas);
+          
+          // Initialize pointer
+          const pointer = {
+            id: -1,
+            texcoordX: 0,
+            texcoordY: 0,
+            prevTexcoordX: 0,
+            prevTexcoordY: 0,
+            deltaX: 0,
+            deltaY: 0,
+            down: false,
+            moved: false,
+            color: { r: 0, g: 0, b: 0 }
+          };
+          pointersRef.current = [pointer];
+          
+          if (fluidSimRef.current) {
+            fluidSimRef.current.pointers = pointersRef.current;
+            
+            // Initialize splatStack if not exists
+            if (!fluidSimRef.current.splatStack) {
+              fluidSimRef.current.splatStack = [];
+            }
+
+            // Add some initial splats for ambient motion
+            setTimeout(() => {
+              if (fluidSimRef.current && fluidSimRef.current.splatStack) {
+                fluidSimRef.current.splatStack.push(3);
+              }
+            }, 1000);
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing fluid simulation:', error);
+        setWebglSupported(false);
+      }
+    }
 
     // Mouse event handlers
     const handleMouseMove = (e) => {
