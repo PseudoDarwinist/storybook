@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import CreateStory from "./components/CreateStory";
+import StoryGeneration from "./components/StoryGeneration";
+import StoryDisplay from "./components/StoryDisplay";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -61,14 +64,26 @@ const FluidSimulation = () => {
   const fluidSimRef = useRef(null);
   const pointersRef = useRef([]);
   const [webglSupported, setWebglSupported] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Check WebGL support
+    // Check WebGL support with more detailed error handling
     const testCanvas = document.createElement('canvas');
-    const gl = testCanvas.getContext('webgl') || testCanvas.getContext('experimental-webgl');
+    let gl;
+    
+    try {
+      gl = testCanvas.getContext('webgl2') || 
+           testCanvas.getContext('webgl') || 
+           testCanvas.getContext('experimental-webgl');
+    } catch (e) {
+      console.error('WebGL initialization error:', e);
+      setWebglSupported(false);
+      return;
+    }
+    
     if (!gl) {
       console.warn('WebGL not supported, using fallback CSS animation');
       setWebglSupported(false);
@@ -79,6 +94,15 @@ const FluidSimulation = () => {
     const resizeCanvas = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      
+      // If fluid simulation is already initialized, update its dimensions
+      if (fluidSimRef.current && typeof fluidSimRef.current.resize === 'function') {
+        try {
+          fluidSimRef.current.resize();
+        } catch (e) {
+          console.warn('Error resizing fluid simulation:', e);
+        }
+      }
     };
 
     resizeCanvas();
@@ -88,15 +112,26 @@ const FluidSimulation = () => {
     if (window.FluidSimulation) {
       initializeFluidSimulation();
     } else {
-      // Load fluid simulation script only if not already loaded
-      const existingScript = document.querySelector('script[src="/fluid.js"]');
+      // Load proper fluid simulation script
+      const existingScript = document.querySelector('script[src="/proper-fluid.js"]');
       if (!existingScript) {
         const script = document.createElement('script');
-        script.src = '/fluid.js';
+        script.src = '/proper-fluid.js';
         script.onload = initializeFluidSimulation;
-        script.onerror = () => {
-          console.error('Failed to load fluid simulation');
-          setWebglSupported(false);
+        script.onerror = (e) => {
+          console.error('Failed to load proper fluid simulation:', e);
+          
+          // Try loading the original fluid.js as fallback
+          console.log('Attempting to load original fluid.js as fallback');
+          const fallbackScript = document.createElement('script');
+          fallbackScript.src = '/fluid.js';
+          fallbackScript.onload = initializeFluidSimulation;
+          fallbackScript.onerror = () => {
+            console.error('Failed to load fallback fluid simulation');
+            setWebglSupported(false);
+            setLoadError(true);
+          };
+          document.head.appendChild(fallbackScript);
         };
         document.head.appendChild(script);
       } else {
@@ -108,111 +143,139 @@ const FluidSimulation = () => {
     function initializeFluidSimulation() {
       try {
         if (window.FluidSimulation && canvas) {
-          fluidSimRef.current = new window.FluidSimulation(canvas);
+          // Only create new instance if one doesn't exist
+          if (!fluidSimRef.current) {
+            fluidSimRef.current = new window.FluidSimulation(canvas);
           
-          // Initialize pointer
-          const pointer = {
-            id: -1,
-            texcoordX: 0,
-            texcoordY: 0,
-            prevTexcoordX: 0,
-            prevTexcoordY: 0,
-            deltaX: 0,
-            deltaY: 0,
-            down: false,
-            moved: false,
-            color: { r: 0, g: 0, b: 0 }
-          };
-          pointersRef.current = [pointer];
-          
-          if (fluidSimRef.current) {
-            fluidSimRef.current.pointers = pointersRef.current;
+            // Initialize pointer with enhanced properties
+            const pointer = {
+              id: -1,
+              texcoordX: 0,
+              texcoordY: 0,
+              prevTexcoordX: 0,
+              prevTexcoordY: 0,
+              deltaX: 0,
+              deltaY: 0,
+              down: false,
+              moved: false,
+              color: { r: 0.7, g: 0.4, b: 0.9 } // Start with vibrant purple
+            };
+            pointersRef.current = [pointer];
             
-            // Initialize splatStack if not exists
-            if (!fluidSimRef.current.splatStack) {
-              fluidSimRef.current.splatStack = [];
-            }
-
-            // Add some initial splats for ambient motion
-            setTimeout(() => {
-              if (fluidSimRef.current && fluidSimRef.current.splatStack) {
-                fluidSimRef.current.splatStack.push(3);
+            if (fluidSimRef.current) {
+              fluidSimRef.current.pointers = pointersRef.current;
+              
+              // Initialize splatStack if not exists
+              if (!fluidSimRef.current.splatStack) {
+                fluidSimRef.current.splatStack = [];
               }
-            }, 1000);
+
+              // Add some initial splats for ambient motion
+              setTimeout(() => {
+                if (fluidSimRef.current && fluidSimRef.current.splatStack) {
+                  fluidSimRef.current.splatStack.push(5); // Increased from 3 for more initial activity
+                }
+              }, 500); // Reduced from 1000 to start animation sooner
+            }
           }
         }
       } catch (error) {
         console.error('Error initializing fluid simulation:', error);
         setWebglSupported(false);
+        setLoadError(true);
       }
     }
 
-    // Mouse event handlers
+    // Mouse event handlers with improved error handling
     const handleMouseMove = (e) => {
       if (!fluidSimRef.current) return;
       
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      
-      const pointer = pointersRef.current[0];
-      if (!pointer.down) {
-        fluidSimRef.current.updatePointerDownData(pointer, -1, x, y);
+      try {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const pointer = pointersRef.current[0];
+        if (!pointer.down) {
+          fluidSimRef.current.updatePointerDownData(pointer, -1, x, y);
+        }
+        fluidSimRef.current.updatePointerMoveData(pointer, x, y);
+      } catch (error) {
+        console.warn('Error handling mouse move:', error);
       }
-      fluidSimRef.current.updatePointerMoveData(pointer, x, y);
     };
 
     const handleMouseDown = (e) => {
       if (!fluidSimRef.current) return;
       
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      
-      const pointer = pointersRef.current[0];
-      fluidSimRef.current.updatePointerDownData(pointer, -1, x, y);
+      try {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const pointer = pointersRef.current[0];
+        fluidSimRef.current.updatePointerDownData(pointer, -1, x, y);
+      } catch (error) {
+        console.warn('Error handling mouse down:', error);
+      }
     };
 
     const handleMouseUp = () => {
       if (!fluidSimRef.current) return;
       
-      const pointer = pointersRef.current[0];
-      fluidSimRef.current.updatePointerUpData(pointer);
+      try {
+        const pointer = pointersRef.current[0];
+        fluidSimRef.current.updatePointerUpData(pointer);
+      } catch (error) {
+        console.warn('Error handling mouse up:', error);
+      }
     };
 
-    // Touch event handlers
+    // Touch event handlers with improved error handling
     const handleTouchStart = (e) => {
       e.preventDefault();
       if (!fluidSimRef.current) return;
       
-      const rect = canvas.getBoundingClientRect();
-      const touch = e.touches[0];
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
-      
-      const pointer = pointersRef.current[0];
-      fluidSimRef.current.updatePointerDownData(pointer, touch.identifier, x, y);
+      try {
+        const rect = canvas.getBoundingClientRect();
+        const touch = e.touches[0];
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+        
+        const pointer = pointersRef.current[0];
+        fluidSimRef.current.updatePointerDownData(pointer, touch.identifier, x, y);
+      } catch (error) {
+        console.warn('Error handling touch start:', error);
+      }
     };
 
     const handleTouchMove = (e) => {
       e.preventDefault();
       if (!fluidSimRef.current) return;
       
-      const rect = canvas.getBoundingClientRect();
-      const touch = e.touches[0];
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
-      
-      const pointer = pointersRef.current[0];
-      fluidSimRef.current.updatePointerMoveData(pointer, x, y);
+      try {
+        const rect = canvas.getBoundingClientRect();
+        const touch = e.touches[0];
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+        
+        const pointer = pointersRef.current[0];
+        fluidSimRef.current.updatePointerMoveData(pointer, x, y);
+      } catch (error) {
+        console.warn('Error handling touch move:', error);
+      }
     };
 
     const handleTouchEnd = (e) => {
       e.preventDefault();
       if (!fluidSimRef.current) return;
       
-      const pointer = pointersRef.current[0];
-      fluidSimRef.current.updatePointerUpData(pointer);
+      try {
+        const pointer = pointersRef.current[0];
+        fluidSimRef.current.updatePointerUpData(pointer);
+      } catch (error) {
+        console.warn('Error handling touch end:', error);
+      }
     };
 
     // Add event listeners
@@ -234,28 +297,56 @@ const FluidSimulation = () => {
       
       // Clean up script only if we added it
       if (!window.FluidSimulation) {
-        const scripts = document.querySelectorAll('script[src="/fluid.js"]');
+        const scripts = document.querySelectorAll('script[src="/proper-fluid.js"], script[src="/fluid.js"]');
         scripts.forEach(script => script.remove());
       }
     };
   }, []);
 
-  // Fallback CSS animation if WebGL not supported
+  // Enhanced fallback CSS animation if WebGL not supported
   if (!webglSupported) {
     return (
       <div 
         className="fixed inset-0 z-0 w-full h-full fallback-fluid-bg"
         style={{ 
-          background: `
-            radial-gradient(ellipse at 20% 50%, rgba(6, 78, 59, 0.8) 0%, transparent 50%),
-            radial-gradient(ellipse at 80% 20%, rgba(16, 185, 129, 0.6) 0%, transparent 50%),
-            radial-gradient(ellipse at 40% 80%, rgba(5, 46, 22, 0.7) 0%, transparent 50%),
-            linear-gradient(135deg, #064e3b 0%, #052e16 50%, #000000 100%)
-          `,
-          backgroundSize: '100% 100%, 100% 100%, 100% 100%, 100% 100%',
-          animation: 'fluidFallback 8s ease-in-out infinite'
+          background: loadError ? 
+            // More dynamic fallback if script loading failed
+            `
+              radial-gradient(ellipse at 25% 40%, rgba(6, 78, 59, 0.9) 0%, transparent 60%),
+              radial-gradient(ellipse at 75% 25%, rgba(16, 185, 129, 0.7) 0%, transparent 60%),
+              radial-gradient(ellipse at 45% 75%, rgba(5, 46, 22, 0.8) 0%, transparent 60%),
+              radial-gradient(ellipse at 80% 80%, rgba(6, 95, 70, 0.7) 0%, transparent 60%),
+              linear-gradient(135deg, #064e3b 0%, #065f46 35%, #047857 65%, #064e3b 100%)
+            ` :
+            // Standard fallback
+            `
+              radial-gradient(ellipse at 20% 50%, rgba(6, 78, 59, 0.8) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 20%, rgba(16, 185, 129, 0.6) 0%, transparent 50%),
+              radial-gradient(ellipse at 40% 80%, rgba(5, 46, 22, 0.7) 0%, transparent 50%),
+              linear-gradient(135deg, #064e3b 0%, #052e16 50%, #000000 100%)
+            `,
+          backgroundSize: '200% 200%, 200% 200%, 200% 200%, 200% 200%',
+          animation: loadError ? 
+            'fluidFallbackEnhanced 12s ease-in-out infinite alternate' : 
+            'fluidFallback 8s ease-in-out infinite'
         }}
-      />
+      >
+        {/* Add animated particles for more visual interest when WebGL fails */}
+        {loadError && Array.from({ length: 20 }).map((_, i) => (
+          <div 
+            key={i}
+            className="absolute rounded-full bg-white opacity-30"
+            style={{
+              width: `${Math.random() * 10 + 5}px`,
+              height: `${Math.random() * 10 + 5}px`,
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animation: `floatParticle ${Math.random() * 10 + 15}s linear infinite`,
+              animationDelay: `${Math.random() * 5}s`
+            }}
+          />
+        ))}
+      </div>
     );
   }
 
@@ -264,7 +355,7 @@ const FluidSimulation = () => {
       ref={canvasRef}
       className="fixed inset-0 z-0 w-full h-full"
       style={{ 
-        background: 'linear-gradient(135deg, #064e3b 0%, #052e16 50%, #000000 100%)',
+        background: 'linear-gradient(135deg, #01190f 0%, #021a14 50%, #011a14 100%)',
         touchAction: 'none'
       }}
     />
@@ -396,30 +487,13 @@ const Home = () => {
         <p className="description text-xl md:text-2xl text-gray-200 mb-12 max-w-2xl leading-relaxed">
           Wonderful Illustrated stories all about your children
         </p>
-        <a 
+        <Link 
           className="cta-button bg-white text-black px-8 py-4 rounded-full text-lg font-semibold hover:bg-gray-100 transition-all duration-300 transform hover:scale-105"
-          href="/app" 
+          to="/app" 
           data-discover="true"
         >
           Start your adventure
-        </a>
-      </div>
-    </div>
-  );
-};
-
-const AppContent = () => {
-  return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold text-gray-800 mb-4">Welcome to Storybook!</h1>
-        <p className="text-xl text-gray-600 mb-8">Your magical adventure begins here...</p>
-        <a 
-          href="/" 
-          className="bg-black text-white px-6 py-3 rounded-full hover:bg-gray-800 transition-colors duration-300"
-        >
-          Back to Home
-        </a>
+        </Link>
       </div>
     </div>
   );
@@ -431,7 +505,9 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/app" element={<AppContent />} />
+          <Route path="/app" element={<CreateStory />} />
+          <Route path="/generation" element={<StoryGeneration />} />
+          <Route path="/story-display" element={<StoryDisplay />} />
         </Routes>
       </BrowserRouter>
     </div>

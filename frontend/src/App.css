@@ -43,6 +43,8 @@ body {
 
 .floating-image:hover {
   filter: drop-shadow(0 0 30px rgba(255, 255, 255, 0.5));
+  transform: scale(1.05);
+  transition: all 0.3s ease-out;
 }
 
 /* Typography */
@@ -215,8 +217,15 @@ canvas {
 /* Fallback fluid animation for browsers without WebGL support */
 .fallback-fluid-bg {
   animation: fluidFallback 8s ease-in-out infinite;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
 }
 
+/* Standard fallback animation */
 @keyframes fluidFallback {
   0%, 100% {
     background-position: 0% 50%, 100% 50%, 50% 100%;
@@ -234,4 +243,221 @@ canvas {
     background-position: 75% 25%, 25% 75%, 100% 75%;
     filter: hue-rotate(270deg);
   }
+}
+
+/* Enhanced fallback animation for more dynamic effect */
+@keyframes fluidFallbackEnhanced {
+  0% {
+    background-position: 0% 0%, 0% 0%, 0% 0%, 0% 0%;
+    filter: hue-rotate(0deg) brightness(1);
+  }
+  25% {
+    background-position: 20% 30%, 70% 10%, 10% 70%, 90% 90%;
+    filter: hue-rotate(90deg) brightness(1.05);
+  }
+  50% {
+    background-position: 40% 60%, 30% 80%, 60% 30%, 20% 40%;
+    filter: hue-rotate(180deg) brightness(1.1);
+  }
+  75% {
+    background-position: 80% 20%, 50% 50%, 80% 80%, 60% 70%;
+    filter: hue-rotate(270deg) brightness(1.05);
+  }
+  100% {
+    background-position: 100% 100%, 100% 0%, 0% 100%, 50% 50%;
+    filter: hue-rotate(360deg) brightness(1);
+  }
+}
+
+/* Particle animation for WebGL fallback */
+@keyframes floatParticle {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.3;
+  }
+  50% {
+    transform: translate(calc(var(--random-x, 0) * 100px), calc(var(--random-y, 0) * -100px)) scale(1.5);
+    opacity: 0.7;
+  }
+  90% {
+    opacity: 0.2;
+  }
+  100% {
+    transform: translate(calc(var(--random-x, 0) * 200px), calc(var(--random-y, 0) * -200px)) scale(0.5);
+    opacity: 0;
+  }
+}
+
+/* Enhanced fluid effects */
+.fluid-container {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Ambient glow effect */
+.ambient-glow {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(16, 185, 129, 0.2) 0%,
+    transparent 70%
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
+  animation: pulseGlow 8s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.2);
+  }
+}
+
+/* Improved floating animation for elements */
+@keyframes enhancedFloat {
+  0%, 100% {
+    transform: translateY(0) translateX(0) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translateY(-15px) translateX(10px) rotate(2deg) scale(1.02);
+  }
+  50% {
+    transform: translateY(5px) translateX(-5px) rotate(-1deg) scale(0.98);
+  }
+  75% {
+    transform: translateY(10px) translateX(15px) rotate(3deg) scale(1.01);
+  }
+}
+
+.enhanced-float {
+  animation: enhancedFloat 15s ease-in-out infinite;
+}
+
+/* Ink drop effect animation */
+@keyframes inkDrop {
+  0% {
+    transform: scale(0);
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.ink-drop {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 70%);
+  width: 100px;
+  height: 100px;
+  pointer-events: none;
+  transform-origin: center;
+  animation: inkDrop 3s ease-out forwards;
+  mix-blend-mode: screen;
+}
+
+/* Enhanced text effects */
+.glowing-text {
+  text-shadow: 
+    0 0 5px rgba(255, 255, 255, 0.5),
+    0 0 10px rgba(255, 255, 255, 0.3),
+    0 0 15px rgba(255, 255, 255, 0.2);
+  animation: textPulse 3s ease-in-out infinite;
+}
+
+@keyframes textPulse {
+  0%, 100% {
+    text-shadow: 
+      0 0 5px rgba(255, 255, 255, 0.5),
+      0 0 10px rgba(255, 255, 255, 0.3),
+      0 0 15px rgba(255, 255, 255, 0.2);
+  }
+  50% {
+    text-shadow: 
+      0 0 10px rgba(255, 255, 255, 0.7),
+      0 0 20px rgba(255, 255, 255, 0.5),
+      0 0 30px rgba(255, 255, 255, 0.3);
+  }
+}
+
+/* Custom cursor with trail effect */
+.cursor-trail {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.5s ease;
+  mix-blend-mode: screen;
+}
+
+/* Improved loading state for fluid simulation */
+.fluid-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #064e3b 0%, #052e16 50%, #000000 100%);
+  z-index: 1;
+  opacity: 1;
+  transition: opacity 1s ease;
+}
+
+.fluid-loading.loaded {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fluid-loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-left-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Enhanced interactive elements */
+.interactive-element {
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.interactive-element:hover {
+  transform: scale(1.1);
+  filter: brightness(1.2);
+}
+
+.interactive-element:active {
+  transform: scale(0.95);
 }

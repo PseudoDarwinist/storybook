@@ -1,7 +1,13 @@
 class FluidSimulation {
     constructor(canvas) {
         this.canvas = canvas;
-        this.gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        // Try WebGL2 first, then fall back to WebGL1
+        this.gl = canvas.getContext('webgl2') || 
+                  canvas.getContext('webgl') || 
+                  canvas.getContext('experimental-webgl');
+        
+        // Store WebGL version for later use
+        this.isWebGL2 = !!canvas.getContext('webgl2');
         
         if (!this.gl) {
             console.error('WebGL not supported');
@@ -44,17 +50,57 @@ class FluidSimulation {
     init() {
         const gl = this.gl;
         
-        // Extension support
-        const ext = {
-            formatRGBA: this.getExtension('WEBGL_color_buffer_float') ? gl.RGBA : gl.RGBA,
-            formatRG: this.getExtension('WEBGL_color_buffer_float') ? gl.RG : gl.RGBA,
-            formatR: this.getExtension('WEBGL_color_buffer_float') ? gl.RED : gl.RGBA,
-            halfFloatTexType: this.getExtension('OES_texture_half_float') ? gl.HALF_FLOAT_OES : gl.FLOAT,
-            floatTexType: this.getExtension('OES_texture_float') ? gl.FLOAT : gl.HALF_FLOAT_OES
+        // Extension support - store actual extension objects
+        const extensions = {
+            colorBufferFloat: this.getExtension('WEBGL_color_buffer_float') || this.getExtension('EXT_color_buffer_float'),
+            textureHalfFloat: this.getExtension('OES_texture_half_float'),
+            textureFloat: this.getExtension('OES_texture_float'),
+            textureHalfFloatLinear: this.getExtension('OES_texture_half_float_linear'),
+            textureFloatLinear: this.getExtension('OES_texture_float_linear')
         };
-
-        if (!ext.formatRGBA) {
+        
+        // Set up format constants based on WebGL version and extensions
+        const ext = {};
+        
+        if (this.isWebGL2) {
+            // WebGL2 has better format support
+            ext.formatRGBA = gl.RGBA8;
+            ext.internalFormatRGBA = gl.RGBA;
+            ext.formatRG = gl.RG8;
+            ext.internalFormatRG = gl.RG;
+            ext.formatR = gl.R8;
+            ext.internalFormatR = gl.RED;
+            ext.halfFloatTexType = gl.HALF_FLOAT;
+            ext.floatTexType = gl.FLOAT;
+        } else {
+            // WebGL1 needs to use RGBA for everything
             ext.formatRGBA = gl.RGBA;
+            ext.internalFormatRGBA = gl.RGBA;
+            ext.formatRG = gl.RGBA; // WebGL1 doesn't have RG format
+            ext.internalFormatRG = gl.RGBA;
+            ext.formatR = gl.RGBA; // WebGL1 doesn't have R format
+            ext.internalFormatR = gl.RGBA;
+            
+            // Check for half float support
+            if (extensions.textureHalfFloat) {
+                ext.halfFloatTexType = extensions.textureHalfFloat.HALF_FLOAT_OES;
+            } else {
+                ext.halfFloatTexType = gl.UNSIGNED_BYTE;
+                console.warn('OES_texture_half_float not supported, using UNSIGNED_BYTE');
+            }
+            
+            // Check for float support
+            if (extensions.textureFloat) {
+                ext.floatTexType = gl.FLOAT;
+            } else {
+                ext.floatTexType = gl.UNSIGNED_BYTE;
+                console.warn('OES_texture_float not supported, using UNSIGNED_BYTE');
+            }
+        }
+
+        // Final fallback for unsupported formats
+        if (!extensions.colorBufferFloat && !this.isWebGL2) {
+            console.warn('Float textures not supported, using UNSIGNED_BYTE');
             ext.halfFloatTexType = gl.UNSIGNED_BYTE;
             ext.floatTexType = gl.UNSIGNED_BYTE;
         }
@@ -74,7 +120,11 @@ class FluidSimulation {
     }
 
     getExtension(name) {
-        return this.gl.getExtension(name);
+        const ext = this.gl.getExtension(name);
+        if (!ext) {
+            console.debug(`Extension ${name} not supported`);
+        }
+        return ext;
     }
 
     createPrograms() {
@@ -322,20 +372,76 @@ class FluidSimulation {
         const simRes = this.getResolution(this.config.SIM_RESOLUTION);
         const dyeRes = this.getResolution(this.config.DYE_RESOLUTION);
 
-        this.density = this.createDoubleFBO(dyeRes.width, dyeRes.height, ext.formatRGBA, ext.halfFloatTexType, ext.formatRGBA, gl.LINEAR, true);
-        this.velocity = this.createDoubleFBO(simRes.width, simRes.height, ext.formatRG, ext.halfFloatTexType, ext.formatRGBA, gl.LINEAR, false);
-        this.divergence = this.createFBO(simRes.width, simRes.height, ext.formatR, ext.halfFloatTexType, ext.formatRGBA, gl.NEAREST, false);
-        this.curl = this.createFBO(simRes.width, simRes.height, ext.formatR, ext.halfFloatTexType, ext.formatRGBA, gl.NEAREST, false);
-        this.pressure = this.createDoubleFBO(simRes.width, simRes.height, ext.formatR, ext.halfFloatTexType, ext.formatRGBA, gl.NEAREST, false);
+        try {
+            this.density = this.createDoubleFBO(
+                dyeRes.width, 
+                dyeRes.height, 
+                ext.formatRGBA, 
+                ext.internalFormatRGBA, 
+                ext.halfFloatTexType, 
+                gl.LINEAR, 
+                true
+            );
+            
+            this.velocity = this.createDoubleFBO(
+                simRes.width, 
+                simRes.height, 
+                ext.formatRG, 
+                ext.internalFormatRG, 
+                ext.halfFloatTexType, 
+                gl.LINEAR, 
+                false
+            );
+            
+            this.divergence = this.createFBO(
+                simRes.width, 
+                simRes.height, 
+                ext.formatR, 
+                ext.internalFormatR, 
+                ext.halfFloatTexType, 
+                gl.NEAREST, 
+                false
+            );
+            
+            this.curl = this.createFBO(
+                simRes.width, 
+                simRes.height, 
+                ext.formatR, 
+                ext.internalFormatR, 
+                ext.halfFloatTexType, 
+                gl.NEAREST, 
+                false
+            );
+            
+            this.pressure = this.createDoubleFBO(
+                simRes.width, 
+                simRes.height, 
+                ext.formatR, 
+                ext.internalFormatR, 
+                ext.halfFloatTexType, 
+                gl.NEAREST, 
+                false
+            );
+        } catch (error) {
+            console.error('Error creating framebuffers:', error);
+            throw new Error('WebGL framebuffer creation failed');
+        }
 
-        // Create reusable vertex buffer (fix for performance and potential buffer issues)
-        this.vertexBuffer = gl.createBuffer();
-        this.indexBuffer = gl.createBuffer();
-        
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), gl.STATIC_DRAW);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 0, 2, 3]), gl.STATIC_DRAW);
+        // Create vertex buffer
+        this.blit = (() => {
+            gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), gl.STATIC_DRAW);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 0, 2, 3]), gl.STATIC_DRAW);
+            
+            return () => {
+                gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), gl.STATIC_DRAW);
+                gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+                gl.enableVertexAttribArray(0);
+                gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+            };
+        })();
     }
 
     getResolution(resolution) {
@@ -353,6 +459,13 @@ class FluidSimulation {
 
     createFBO(w, h, internalFormat, format, type, filter, wrap) {
         const gl = this.gl;
+        
+        // Ensure width and height are valid
+        if (w <= 0 || h <= 0) {
+            console.error('Invalid framebuffer dimensions:', w, h);
+            throw new Error('Invalid framebuffer dimensions');
+        }
+        
         gl.activeTexture(gl.TEXTURE0);
         
         const texture = gl.createTexture();
@@ -361,13 +474,28 @@ class FluidSimulation {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap ? gl.REPEAT : gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap ? gl.REPEAT : gl.CLAMP_TO_EDGE);
-        gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, w, h, 0, format, type, null);
+        
+        // Create texture with proper format
+        try {
+            gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, w, h, 0, format, type, null);
+        } catch (error) {
+            console.error('Error creating texture:', error);
+            // Fallback to RGBA/UNSIGNED_BYTE if texture creation fails
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        }
 
         const fbo = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
         gl.viewport(0, 0, w, h);
         gl.clear(gl.COLOR_BUFFER_BIT);
+        
+        // Check framebuffer status
+        const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+        if (status !== gl.FRAMEBUFFER_COMPLETE) {
+            console.error('Framebuffer not complete. Status:', status);
+            throw new Error('Framebuffer not complete');
+        }
 
         return {
             texture,
@@ -462,27 +590,30 @@ class FluidSimulation {
         gl.disable(gl.BLEND);
 
         // Curl
-        gl.useProgram(this.programs.curl);
-        gl.uniform2f(gl.getUniformLocation(this.programs.curl, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
-        gl.uniform1i(gl.getUniformLocation(this.programs.curl, 'uVelocity'), this.velocity.read.attach(0));
+        this.curlProgram = this.programs.curl;
+        gl.useProgram(this.curlProgram);
+        gl.uniform2f(gl.getUniformLocation(this.curlProgram, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
+        gl.uniform1i(gl.getUniformLocation(this.curlProgram, 'uVelocity'), this.velocity.read.attach(0));
 
         this.blit(this.curl);
 
         // Vorticity
-        gl.useProgram(this.programs.vorticity);
-        gl.uniform2f(gl.getUniformLocation(this.programs.vorticity, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
-        gl.uniform1i(gl.getUniformLocation(this.programs.vorticity, 'uVelocity'), this.velocity.read.attach(0));
-        gl.uniform1i(gl.getUniformLocation(this.programs.vorticity, 'uCurl'), this.curl.attach(1));
-        gl.uniform1f(gl.getUniformLocation(this.programs.vorticity, 'curl'), this.config.CURL);
-        gl.uniform1f(gl.getUniformLocation(this.programs.vorticity, 'dt'), dt);
+        this.vorticityProgram = this.programs.vorticity;
+        gl.useProgram(this.vorticityProgram);
+        gl.uniform2f(gl.getUniformLocation(this.vorticityProgram, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
+        gl.uniform1i(gl.getUniformLocation(this.vorticityProgram, 'uVelocity'), this.velocity.read.attach(0));
+        gl.uniform1i(gl.getUniformLocation(this.vorticityProgram, 'uCurl'), this.curl.attach(1));
+        gl.uniform1f(gl.getUniformLocation(this.vorticityProgram, 'curl'), this.config.CURL);
+        gl.uniform1f(gl.getUniformLocation(this.vorticityProgram, 'dt'), dt);
 
         this.blit(this.velocity.write);
         this.velocity.swap();
 
         // Divergence
-        gl.useProgram(this.programs.divergence);
-        gl.uniform2f(gl.getUniformLocation(this.programs.divergence, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
-        gl.uniform1i(gl.getUniformLocation(this.programs.divergence, 'uVelocity'), this.velocity.read.attach(0));
+        this.divergenceProgram = this.programs.divergence;
+        gl.useProgram(this.divergenceProgram);
+        gl.uniform2f(gl.getUniformLocation(this.divergenceProgram, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
+        gl.uniform1i(gl.getUniformLocation(this.divergenceProgram, 'uVelocity'), this.velocity.read.attach(0));
 
         this.blit(this.divergence);
 
@@ -491,53 +622,43 @@ class FluidSimulation {
         gl.clear(gl.COLOR_BUFFER_BIT);
 
         // Pressure
-        gl.useProgram(this.programs.pressure);
-        gl.uniform2f(gl.getUniformLocation(this.programs.pressure, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
-        gl.uniform1i(gl.getUniformLocation(this.programs.pressure, 'uDivergence'), this.divergence.attach(0));
+        this.pressureProgram = this.programs.pressure;
+        gl.useProgram(this.pressureProgram);
+        gl.uniform2f(gl.getUniformLocation(this.pressureProgram, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
+        gl.uniform1i(gl.getUniformLocation(this.pressureProgram, 'uDivergence'), this.divergence.attach(0));
 
         for (let i = 0; i < this.config.PRESSURE_ITERATIONS; i++) {
-            gl.uniform1i(gl.getUniformLocation(this.programs.pressure, 'uPressure'), this.pressure.read.attach(1));
+            gl.uniform1i(gl.getUniformLocation(this.pressureProgram, 'uPressure'), this.pressure.read.attach(1));
             this.blit(this.pressure.write);
             this.pressure.swap();
         }
 
         // Gradient subtract
-        gl.useProgram(this.programs.gradientSubtract);
-        gl.uniform2f(gl.getUniformLocation(this.programs.gradientSubtract, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
-        gl.uniform1i(gl.getUniformLocation(this.programs.gradientSubtract, 'uPressure'), this.pressure.read.attach(0));
-        gl.uniform1i(gl.getUniformLocation(this.programs.gradientSubtract, 'uVelocity'), this.velocity.read.attach(1));
+        this.gradSubtractProgram = this.programs.gradientSubtract;
+        gl.useProgram(this.gradSubtractProgram);
+        gl.uniform2f(gl.getUniformLocation(this.gradSubtractProgram, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
+        gl.uniform1i(gl.getUniformLocation(this.gradSubtractProgram, 'uPressure'), this.pressure.read.attach(0));
+        gl.uniform1i(gl.getUniformLocation(this.gradSubtractProgram, 'uVelocity'), this.velocity.read.attach(1));
 
         this.blit(this.velocity.write);
         this.velocity.swap();
 
-        // Advect velocity - FIX: Unbind textures properly to avoid feedback loop
-        gl.useProgram(this.programs.advection);
-        gl.uniform2f(gl.getUniformLocation(this.programs.advection, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
-        
-        // First bind velocity texture
-        const velocityTextureUnit = this.velocity.read.attach(0);
-        gl.uniform1i(gl.getUniformLocation(this.programs.advection, 'uVelocity'), velocityTextureUnit);
-        
-        // Use the same texture for source in velocity advection (this is correct for self-advection)
-        gl.uniform1i(gl.getUniformLocation(this.programs.advection, 'uSource'), velocityTextureUnit);
-        
-        gl.uniform1f(gl.getUniformLocation(this.programs.advection, 'dt'), dt);
-        gl.uniform1f(gl.getUniformLocation(this.programs.advection, 'dissipation'), this.config.VELOCITY_DISSIPATION);
+        // Advect velocity
+        this.advectionProgram = this.programs.advection;
+        gl.useProgram(this.advectionProgram);
+        gl.uniform2f(gl.getUniformLocation(this.advectionProgram, 'texelSize'), this.velocity.texelSizeX, this.velocity.texelSizeY);
+        gl.uniform1i(gl.getUniformLocation(this.advectionProgram, 'uVelocity'), this.velocity.read.attach(0));
+        gl.uniform1i(gl.getUniformLocation(this.advectionProgram, 'uSource'), this.velocity.read.attach(0));
+        gl.uniform1f(gl.getUniformLocation(this.advectionProgram, 'dt'), dt);
+        gl.uniform1f(gl.getUniformLocation(this.advectionProgram, 'dissipation'), this.config.VELOCITY_DISSIPATION);
 
         this.blit(this.velocity.write);
         this.velocity.swap();
 
-        // Advect color - FIX: Properly separate velocity and density texture units
-        // Re-use the advection program but update texture uniforms
-        gl.uniform2f(gl.getUniformLocation(this.programs.advection, 'texelSize'), this.density.texelSizeX, this.density.texelSizeY);
-        
-        // Use different texture units to avoid conflicts
-        const velocityUnit = this.velocity.read.attach(0);
-        const densityUnit = this.density.read.attach(1);
-        
-        gl.uniform1i(gl.getUniformLocation(this.programs.advection, 'uVelocity'), velocityUnit);
-        gl.uniform1i(gl.getUniformLocation(this.programs.advection, 'uSource'), densityUnit);
-        gl.uniform1f(gl.getUniformLocation(this.programs.advection, 'dissipation'), this.config.DENSITY_DISSIPATION);
+        // Advect color
+        gl.uniform1i(gl.getUniformLocation(this.advectionProgram, 'uVelocity'), this.velocity.read.attach(0));
+        gl.uniform1i(gl.getUniformLocation(this.advectionProgram, 'uSource'), this.density.read.attach(1));
+        gl.uniform1f(gl.getUniformLocation(this.advectionProgram, 'dissipation'), this.config.DENSITY_DISSIPATION);
 
         this.blit(this.density.write);
         this.density.swap();
@@ -685,26 +806,25 @@ class FluidSimulation {
     }
 
     blit(target) {
-        const gl = this.gl;
-        
         if (target == null) {
-            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            this.gl.viewport(0, 0, this.gl.canvas.width, this.gl.canvas.height);
+            this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
         } else {
-            gl.viewport(0, 0, target.width, target.height);
-            gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+            this.gl.viewport(0, 0, target.width, target.height);
+            this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, target.fbo);
         }
         
-        // Use the reusable buffers instead of creating new ones
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
-        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(0);
-        gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.gl.createBuffer());
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), this.gl.STATIC_DRAW);
+        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.gl.createBuffer());
+        this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 0, 2, 3]), this.gl.STATIC_DRAW);
+        this.gl.vertexAttribPointer(0, 2, this.gl.FLOAT, false, 0, 0);
+        this.gl.enableVertexAttribArray(0);
+        this.gl.drawElements(this.gl.TRIANGLES, 6, this.gl.UNSIGNED_SHORT, 0);
     }
 }
 
-// Only declare FluidSimulation if it doesn't already exist
-if (typeof window !== 'undefined' && !window.FluidSimulation) {
+// Only declare FluidSimulation if it doesn't already exist in the global scope
+if (typeof window !== 'undefined' && typeof window.FluidSimulation === 'undefined') {
     window.FluidSimulation = FluidSimulation;
 }
